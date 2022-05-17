@@ -1,0 +1,2 @@
+files wasm and abi in this folder are used by autodeploy by hub contract, must be in github repo!
+files wasm and abi located in my folder fdacdaocore1 are used by my deploy script for my purposes.

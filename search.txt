@@ -1,0 +1,342 @@
+Searching 11 files for "EOS"
+
+/home/andy/Work_Projects/dev/fdacdaocore1/external_structs.hpp:
+    2      struct actionhooks {
+    3        uint64_t hook_id;
+    4:       eosio::name hooked_action;// must be the action name on which to apply the hook
+    5:       eosio::name hooked_contract;// must be the contract where the hooked_action is
+    6:       eosio::name hook_action_name;
+    7        std::string description;
+    8        uint64_t exec_count;
+    9:       eosio::time_point_sec last_exec;
+   10        bool enabled;
+   11        auto primary_key() const { return hook_id; }
+   ..
+   13  
+   14      };
+   15:     typedef eosio::multi_index<eosio::name("actionhooks"), actionhooks,
+   16:       eosio::indexed_by<"byhook"_n, eosio::const_mem_fun<actionhooks, uint128_t, &actionhooks::by_hook>>
+   17      > actionhooks_table;
+   18  
+
+/home/andy/Work_Projects/dev/fdacdaocore1/fdacdaocore1.cpp:
+  104          conf.hub_account,
+  105          "messagebus2"_n,
+  106:         std::make_tuple(get_self(), name("propose"), msg, vector<name>{name("croneosdac22")}, data)
+  107      ).send();
+  108  
+
+/home/andy/Work_Projects/dev/fdacdaocore1/fdacdaocore1.hpp:
+    1  
+    2: #include <eosio/eosio.hpp>
+    3: #include <eosio/asset.hpp>
+    4: //#include <eosio/system.hpp>
+    5: #include <eosio/permission.hpp>
+    6: #include <eosio/singleton.hpp>
+    7  #include "system_structs.hpp"
+    8  #include "external_structs.hpp"
+    .
+   11  
+   12  using namespace std;
+   13: using namespace eosio;
+   14  
+   15  CONTRACT fdacdaocore1 : public contract {
+   ..
+   34  
+   35      struct payment{
+   36:         eosio::name receiver;
+   37:         eosio::asset amount;
+   38      };
+   39  
+   ..
+  128  
+  129      //notification handlers
+  130:     [[eosio::on_notify("*::transfer")]]
+  131      void on_transfer(name from, name to, asset quantity, string memo);
+  132  
+  ...
+  143        groupconf conf;
+  144      };
+  145:     typedef eosio::singleton<"coreconf"_n, coreconf> coreconf_table;
+  146  
+  147      TABLE corestate{
+  148        groupstate state;
+  149      };
+  150:     typedef eosio::singleton<"corestate"_n, corestate> corestate_table;
+  151  
+  152      TABLE threshlinks {
+  ...
+  162      };
+  163      typedef multi_index<name("threshlinks"), threshlinks,
+  164:       //eosio::indexed_by<"byaction"_n, eosio::const_mem_fun<threshlinks, uint64_t, &threshlinks::by_action>>,
+  165:       eosio::indexed_by<"bythreshold"_n, eosio::const_mem_fun<threshlinks, uint64_t, &threshlinks::by_threshold>>,
+  166:       eosio::indexed_by<"bycontact"_n, eosio::const_mem_fun<threshlinks, uint128_t, &threshlinks::by_cont_act>>
+  167      > threshlinks_table;
+  168  
+  ...
+  193      };
+  194      typedef multi_index<name("proposals"), proposals,
+  195:       eosio::indexed_by<"bythreshold"_n, eosio::const_mem_fun<proposals, uint64_t, &proposals::by_threshold>>,
+  196:       eosio::indexed_by<"byproposer"_n, eosio::const_mem_fun<proposals, uint64_t, &proposals::by_proposer>>,
+  197:       eosio::indexed_by<"byexpiration"_n, eosio::const_mem_fun<proposals, uint64_t, &proposals::by_expiration>>
+  198      > proposals_table;
+  199  
+  ...
+  209      };
+  210      typedef multi_index<name("custodians"), custodians,
+  211:       eosio::indexed_by<"bylastactive"_n, eosio::const_mem_fun<custodians, uint64_t, &custodians::by_last_active>>
+  212      > custodians_table;
+  213  
+  ...
+  249      };
+  250      typedef multi_index<"dacfiles"_n, dacfiles,
+  251:       eosio::indexed_by<"bypublished"_n, eosio::const_mem_fun<dacfiles, uint64_t, &dacfiles::by_published>>
+  252      > dacfiles_table;
+  253  
+  ...
+  261      };
+  262      typedef multi_index<"balances"_n, balances,
+  263:       eosio::indexed_by<"bycontrsym"_n, eosio::const_mem_fun<balances, uint128_t, &balances::by_contr_sym>>
+  264      > balances_table;
+  265  
+  ...
+  284      };
+  285      typedef multi_index<name("modules"), modules,
+  286:       eosio::indexed_by<"bymoduleacc"_n, eosio::const_mem_fun<modules, uint64_t, &modules::by_module_acc>>
+  287      > modules_table;
+  288  
+  ...
+  306  
+  307      //vector<threshold_name_and_value> get_counts_for
+  308:     //https://eosio.stackexchange.com/questions/4999/how-do-i-pass-an-iterator/5012#5012
+  309      uint8_t get_total_approved_proposal_weight(proposals_table::const_iterator& prop_itr);
+  310      
+  ...
+  337        vector<permission_level> masterperm = { master };
+  338        auto packed_master = pack(masterperm);
+  339:       auto test = eosio::check_permission_authorization(
+  340                    slave.actor,
+  341                    slave.permission,
+  ...
+  350  
+  351      struct sort_authorization_by_name{
+  352:       inline bool operator() (const eosiosystem::permission_level_weight& plw1, const eosiosystem::permission_level_weight& plw2){
+  353          return (plw1.permission.actor < plw2.permission.actor);
+  354        }
+  ...
+  375      struct  hookmanager{
+  376  
+  377:       hookmanager(eosio::name hooked_action, eosio::name self_)  { 
+  378  
+  379          modules_table _modules(self_, self_.value);
+  380:         auto mod_itr = _modules.find(eosio::name("hooks").value );
+  381          if(mod_itr != _modules.end() ){
+  382          
+  383:           eosio::name hooks_contract = mod_itr->slave_permission.actor;
+  384            actionhooks_table _actionhooks(hooks_contract, hooks_contract.value);
+  385            auto by_hook = _actionhooks.get_index<"byhook"_n>();
+  ...
+  388            if(hook_itr != by_hook.end() ){
+  389              if(hook_itr->enabled){
+  390:               eosio::action(
+  391:                   eosio::permission_level{ self_, "owner"_n },
+  392                    hooks_contract,
+  393                    hook_itr->hook_action_name,
+
+/home/andy/Work_Projects/dev/fdacdaocore1/functions.cpp:
+  111  
+  112  void fdacdaocore1::update_owner_maintainance(const permission_level& maintainer){
+  113:   vector<eosiosystem::permission_level_weight> accounts;
+  114  
+  115:   eosiosystem::permission_level_weight code_account{
+  116:         .permission = permission_level(get_self(), name("eosio.code") ),
+  117          .weight = (uint16_t) 1,
+  118    };
+  119  
+  120:   eosiosystem::permission_level_weight self_active_account{
+  121          .permission = permission_level(get_self(), name("active") ),
+  122          .weight = (uint16_t) 1,
+  ...
+  124  
+  125    if(maintainer.actor != name(0) && is_account(maintainer.actor) ){
+  126:     eosiosystem::permission_level_weight maintainer_account{
+  127            .permission = maintainer,
+  128            .weight = (uint16_t) 1,
+  ...
+  138    }
+  139  
+  140:   eosiosystem::authority new_owner_authority{
+  141          .threshold = (uint16_t) 1,
+  142          .accounts = accounts,
+  ...
+  147    action(
+  148      permission_level{get_self(), "owner"_n},
+  149:     "eosio"_n, "updateauth"_n,
+  150      std::make_tuple(get_self(), "owner"_n, ""_n, new_owner_authority)
+  151    ).send();
+  ...
+  157    custodians_table _custodians(get_self(), get_self().value);
+  158  
+  159:   vector<eosiosystem::permission_level_weight> accounts;//active custodians
+  160:   vector<eosiosystem::permission_level_weight> inactive_accounts;//inactive custodians
+  161  
+  162    for (auto itr = _custodians.begin(); itr != _custodians.end(); itr++) {
+  163  
+  164:     eosiosystem::permission_level_weight account{
+  165            .permission = permission_level(itr->account, itr->authority),
+  166            .weight = (uint16_t) 1,
+  ...
+  177    accounts = accounts.size() == 0 ? inactive_accounts : accounts;
+  178  
+  179:   eosiosystem::authority new_authority{
+  180          .threshold = accounts.size(),
+  181          .accounts = accounts,
+  ...
+  186    action(
+  187      permission_level{get_self(), "owner"_n},
+  188:     "eosio"_n, "updateauth"_n,
+  189      std::make_tuple(get_self(), "active"_n, "owner"_n, new_authority)
+  190    ).send();
+
+/home/andy/Work_Projects/dev/fdacdaocore1/hookmanager.hpp:
+    1      struct actionhooks {
+    2        uint64_t hook_id;
+    3:       eosio::name hooked_action;// must be the action name on which to apply the hook
+    4:       eosio::name hooked_contract;// must be the contract where the hooked_action is
+    5:       eosio::name hook_action_name;
+    6        uint64_t exec_count;
+    7:       eosio::time_point_sec last_exec;
+    8        bool enabled;
+    9        auto primary_key() const { return hook_id; }
+   ..
+   11  
+   12      };
+   13:     typedef eosio::multi_index<eosio::name("actionhooks"), actionhooks,
+   14:       eosio::indexed_by<"byhook"_n, eosio::const_mem_fun<actionhooks, uint128_t, &actionhooks::by_hook>>
+   15      > actionhooks_table;
+   16  
+   ..
+   19      struct  hookmanager{
+   20  
+   21:       hookmanager(eosio::name hooked_action, eosio::name self_)  { 
+   22  
+   23          modules_table _modules(self_, self_.value);
+   24:         auto mod_itr = _modules.find(eosio::name("hooks").value );
+   25          if(mod_itr != _modules.end() ){
+   26          
+   27:             eosio::name hooks_contract = *mod_itr->slave_permission.actor;
+   28              actionhooks_table _actionhooks(hooks_contract, hooks_contract.value);
+   29              auto by_hook = _actionhooks.get_index<"byhook"_n>();
+   ..
+   31              auto hook_itr = by_hook.find(composite_id);
+   32              if(hook_itr != by_hook.end() ){
+   33:                 eosio::action(
+   34:                     eosio::permission_level{ self_, "owner"_n },
+   35                      hooks_contract,
+   36                      hook_itr->hook_action_name,
+
+/home/andy/Work_Projects/dev/fdacdaocore1/Mycli.txt:
+   16  
+   17  
+   18: eosio-cpp -abigen freeossurvey.cpp -o=depl_freeossurvey/freeossurvey/freeossurvey.wasm -I=incl_freeossurvey
+   19: eosio-cpp -abigen freeossurvey.cpp -o=depl_freeossurvey/freeossurvey/freeossurvey.wasm -I.
+   20  
+   21: proton1 set contract freeosgov /home/andyb/project_dev/dev_env/freegovdev-main/depl_freegovdev/freegovdev -p freeosgov
+   22: cleos -u https://protontestnet.greymass.com set contract freeosgov /home/andyb/project_dev/dev_env/freeosgov-main freeosgov.wasm freeosgov.abi
+   23  
+   24: /home/andyb/freeosgov/freeosgov/depl_freeossurvey/freeossurvey
+   25  
+   26  THIS ONE
+   27: cleos -u https://protontestnet.greymass.com set contract freeosgovdev /home/andyb/project_dev/dev_env/freeosgov-main freeosgovdev.wasm freeosgovdev.abi
+   28: cleos -u https://protontestnet.greymass.com set contract freeosdiv5 /home/andy/devel_allocate/dividenda dividenda.wasm dividenda.abi
+   29  
+   30  
+   ..
+   32  
+   33  password: Unlocked: govevents
+   34: andyb@andyb:~/project_dev/dev_env/freeosgov-main$ cleos -u https://protontestnet.greymass.com set contract freeosgovdev /home/andyb/project_dev/dev_env/freeosgov-main freeosgov.wasm freeosgov.abi
+   35: Reading WASM from /home/andyb/project_dev/dev_env/freeosgov-main/freeosgov.wasm...
+   36  Publishing contract...
+   37  executed transaction: e2c21fb315b5afe8f93143bb2b3d56766ffbe220f04be04a28461c6d917fee60  37760 bytes  11231 us
+   38: #         eosio <= eosio::setcode               {"account":"freeosgovdev","vmtype":0,"vmversion":0,"code":"0061736d010000000185022660000060037f7f7f0...
+   39: #         eosio <= eosio::setabi                {"account":"freeosgovdev","abi":"0e656f73696f3a3a6162692f312e310027076163636f756e7400010762616c616e6...
+   40  warning: transaction executed locally, but may not be confirmed by the network yetult         ] 
+   41: andyb@andyb:~/project_dev/dev_env/freeosgov-main$ 
+   42  
+   43  
+   44  
+   45: cleos -u https://proton-testnet.eoscafeblock.com push transaction '{
+   46    "delay_sec": 0,
+   47    "max_cpu_usage_ms": 0,
+   48    "actions": [
+   49      {
+   50:       "account": "freeosgovdev",
+   51        "name": "fakereceiver",
+   52        "data": {
+   ..
+   57        "authorization": [
+   58          {
+   59:           "actor": "freeosgovdev",
+   60            "permission": "active"
+   61          }
+   ..
+   89  
+   90  Failed to deserialize variant
+   91: andyb@andyb:~/project_dev/dev_env/freeosgov-main$ cleos -u https://proton-testnet.eoscafeblock.com push transaction '{ 
+   92    "delay_sec": 0,
+   93    "max_cpu_usage_ms": 0,
+   94    "actions": [
+   95      {
+   96:       "account": "freeosgovdev",
+   97        "name": "fakereceiver",
+   98        "data": {
+   ..
+  103        "authorization": [
+  104          {
+  105:           "actor": "freeosgovdev",
+  106            "permission": "active"
+  107          }
+  ...
+  167  
+  168  
+  169: cleos -u https://protontestnet.greymass.com push transaction '{
+  170    "delay_sec": 0,
+  171    "max_cpu_usage_ms": 0,
+  172    "actions": [
+  173      {
+  174:       "account": "freeosgovdev",
+  175        "name": "freceiver",
+  176        "data": {
+  ...
+  181        "authorization": [
+  182          {
+  183:           "actor": "freeosgovdev",
+  184            "permission": "active"
+  185          }
+
+/home/andy/Work_Projects/dev/fdacdaocore1/Mycompile.sh:
+    1: eosio-cpp -o fdacdaocore1.wasm fdacdaocore1.cpp --abigen
+    2  
+
+/home/andy/Work_Projects/dev/fdacdaocore1/Mydeploy.sh:
+    1: cleos -u https://protontestnet.greymass.com set contract fdacdaocore1  /home/andy/Work_Projects/dev/fdacdaocore1/fdacdaocore1 fdacdaocore1.wasm fdacdaocore1.abi
+    2  
+    3  
+
+/home/andy/Work_Projects/dev/fdacdaocore1/system_structs.hpp:
+    1  //Authority Structs
+    2: namespace eosiosystem {
+    3  
+    4      struct key_weight {
+    5:         eosio::public_key key;
+    6          uint16_t weight;
+    7:         EOSLIB_SERIALIZE( key_weight, (key)(weight) )
+    8      };
+    9  
+   10      struct permission_level_weight {
+   11:         eosio::permission_level permission;
+   12          uint16_t weight;
+   13      };
+
+139 matches across 9 files
+
